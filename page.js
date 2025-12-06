@@ -81,15 +81,53 @@ export default function ShareAvailability() {
     });
   };
 
+  // Mouse down on a cell (start of selection)
   const handleMouseDown = (dayKey, time) => {
-    const isSelected = availability[dayKey]?.includes(time);
-    dragModeRef.current = !isSelected; // select or deselect
-    draggingRef.current = true;
-    toggleSlot(dayKey, time);
+    toggleCell(dayKey, time);
   };
 
-  const handleMouseEnter = (dayKey, time) => {
-    if (draggingRef.current) toggleSlot(dayKey, time);
+  // Mouse enter a cell while holding mouse button (drag)
+  const handleMouseEnter = (dayKey, time, e) => {
+    if (e.buttons !== 1) return; // Only when left mouse button is pressed
+    toggleCell(dayKey, time);
+  };
+
+  // Helper function to toggle a single cell
+  const toggleCell = (dayKey, time) => {
+    setAvailability((prev) => {
+      const dayTimes = prev[dayKey] || [];
+      const selected = dayTimes.includes(time);
+
+      const updatedTimes = selected ? dayTimes.filter((t) => t !== time) : [...dayTimes, time];
+
+      // Update daySchedules immediately
+      setDaySchedules((ds) => ({
+        ...ds,
+        [dayKey]: {
+          ...ds[dayKey],
+          enabled: updatedTimes.length > 0, // enable day if at least one cell selected
+          timeSlots: updatedTimes
+            .sort((a, b) => a.localeCompare(b))
+            .map((t) => {
+              const existing = ds[dayKey]?.timeSlots.find((s) => s.id === t);
+              if (existing) return existing;
+
+              const [hour, min] = t.split(':').map(Number);
+              let endHour = hour + 1;
+              if (endHour > 23) endHour = 0;
+
+              const pad = (n) => n.toString().padStart(2, '0');
+              return {
+                id: t,
+                start: `${pad(hour)}:${pad(min)}`,
+                end: `${pad(endHour)}:${pad(min)}`,
+              };
+            }),
+        },
+      }));
+
+      return { ...prev, [dayKey]: updatedTimes };
+    });
   };
 
   const handleMouseUp = () => {
@@ -131,6 +169,7 @@ export default function ShareAvailability() {
 
       // Convert ranges into {start, end} with end + 1 hour
       newSchedules[dayKey] = {
+        enabled: true, // <-- keep day enabled so time slots show
         timeSlots: ranges.map(([s, e], idx) => ({
           id: `${dayKey}-${idx}`,
           start: s,
@@ -888,28 +927,21 @@ export default function ShareAvailability() {
                         {/* Time cells */}
                         {times.map((time) => {
                           const selected = availability[dayObj.key]?.includes(time);
-
                           return (
                             <td key={time} className="border border-gray-200 p-0">
                               <div
-                            className={`
-                              w-full h-9 flex items-center justify-center text-[11px] font-medium 
-                              cursor-pointer select-none transition-all duration-150 rounded
-                              ${
-                                selected
-                                  ? 'bg-[#1A73E8] text-white shadow-sm'
-                                  : 'bg-white hover:bg-[#E8F0FE] text-gray-700'
-                              }
-                            `}
-                            onMouseDown={() => handleMouseDown(dayObj.key, time)}
-                            onMouseMove={(e) => {
-                              if (e.buttons === 1) {
-                                handleMouseEnter(dayObj.key, time); // still works; name doesn’t matter
-                              }
-                            }}
-                          >
-                          </div>
-
+                                className={`
+                                  w-full h-9 flex items-center justify-center text-[11px] font-medium 
+                                  cursor-pointer select-none transition-all duration-150 rounded
+                                  ${
+                                    selected
+                                      ? 'bg-[#1A73E8] text-white shadow-sm'
+                                      : 'bg-white hover:bg-[#E8F0FE] text-gray-700'
+                                  }
+                                `}
+                                onMouseDown={() => handleMouseDown(dayObj.key, time)}
+                                onMouseEnter={(e) => handleMouseEnter(dayObj.key, time, e)}
+                              />
                             </td>
                           );
                         })}
@@ -951,68 +983,61 @@ export default function ShareAvailability() {
 
               {/* Time Slots for Selected Days */}
 
-              {selectedDays.length > 0 && (
-                <div className="space-y-6">
-                  {selectedDays
-                    .sort(
-                      (a, b) =>
-                        days.findIndex((d) => d.key === a) - days.findIndex((d) => d.key === b)
-                    )
-                    .map((day) => (
-                      <div key={day} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex justify-between items-center mb-4">
-                          <h4 className="font-semibold capitalize">{day}</h4>
-                          <button
-                            type="button"
-                            onClick={() => addTimeSlot(day)}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                          >
-                            + Add Time Slot
-                          </button>
-                        </div>
-                        <div className="space-y-3">
-                          {daySchedules[day].timeSlots.map((slot, index) => (
-                            <div
-                              key={slot.id}
-                              className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3"
+              {days
+                .filter((d) => daySchedules[d.key]?.enabled)
+                .map((day) => (
+                  <div key={day.key} className="border border-gray-200 rounded-lg p-4 mb-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-semibold capitalize">{day.label}</h4>
+                      <button
+                        type="button"
+                        onClick={() => addTimeSlot(day.key)}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                      >
+                        + Add Time Slot
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {daySchedules[day.key].timeSlots.map((slot, index) => (
+                        <div
+                          key={slot.id}
+                          className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3"
+                        >
+                          <div className="flex items-center space-x-2 w-full sm:w-auto">
+                            <input
+                              type="time"
+                              value={slot.start}
+                              onChange={(e) =>
+                                updateTimeSlot(day.key, index, 'start', e.target.value)
+                              }
+                              className="px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
+                              required
+                            />
+                            <span className="text-gray-500 text-sm sm:text-base">to</span>
+                            <input
+                              type="time"
+                              value={slot.end}
+                              onChange={(e) =>
+                                updateTimeSlot(day.key, index, 'end', e.target.value)
+                              }
+                              className="px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
+                              required
+                            />
+                          </div>
+                          {daySchedules[day.key].timeSlots.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeTimeSlot(day.key, index)}
+                              className="text-red-600 hover:text-red-800 text-sm px-2 py-1 border border-red-300 rounded-sm hover:bg-red-50 transition-colors w-full sm:w-auto"
                             >
-                              <div className="flex items-center space-x-2 w-full sm:w-auto">
-                                <input
-                                  type="time"
-                                  value={slot.start}
-                                  onChange={(e) =>
-                                    updateTimeSlot(day, index, 'start', e.target.value)
-                                  }
-                                  className="px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
-                                  required
-                                />
-                                <span className="text-gray-500 text-sm sm:text-base">to</span>
-                                <input
-                                  type="time"
-                                  value={slot.end}
-                                  onChange={(e) =>
-                                    updateTimeSlot(day, index, 'end', e.target.value)
-                                  }
-                                  className="px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-hidden focus:ring-2 focus:ring-blue-500 w-full sm:w-auto"
-                                  required
-                                />
-                              </div>
-                              {daySchedules[day].timeSlots.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => removeTimeSlot(day, index)}
-                                  className="text-red-600 hover:text-red-800 text-sm px-2 py-1 border border-red-300 rounded-sm hover:bg-red-50 transition-colors w-full sm:w-auto"
-                                >
-                                  Remove
-                                </button>
-                              )}
-                            </div>
-                          ))}
+                              Remove
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    ))}
-                </div>
-              )}
+                      ))}
+                    </div>
+                  </div>
+                ))}
             </div>
 
             {/* Description */}
