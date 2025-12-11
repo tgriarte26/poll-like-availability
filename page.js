@@ -482,37 +482,39 @@ const handleManualTimeSubmit = (dayKey) => {
   /**
    * @description Adds a new empty time slot to a specific day.
    */
-  const addTimeSlot = (day) => {
-    setDaySchedules((prev) => ({
+  const addTimeSlot = (dayKey) => {
+  setDaySchedules(prev => {
+    const newSlot = {
+      id: crypto.randomUUID(), // only generate once
+      start: '09:00',
+      end: '10:00',
+    };
+    return {
       ...prev,
-      [day]: {
-        ...prev[day],
-        timeSlots: [...prev[day].timeSlots, { start: '', end: '' }],
+      [dayKey]: {
+        ...prev[dayKey],
+        timeSlots: [...prev[dayKey].timeSlots, newSlot],
       },
-    }));
-  };
+    };
+  });
+};
+
 
   /**
    * @description Removes a time slot from a day by its index.
    */
-  const removeTimeSlot = (dayKey, indexToRemove) => {
+const removeTimeSlot = (dayKey, slotId) => {
   setDaySchedules((prev) => {
-    const updatedTimeSlots = prev[dayKey].timeSlots.filter(
-      (_, i) => i !== indexToRemove
+    const filteredSlots = (prev[dayKey]?.timeSlots || []).filter(
+      (slot) => slot.id !== slotId
     );
-
-    // Also remove from availability
-    setAvailability((avail) => ({
-      ...avail,
-      [dayKey]: updatedTimeSlots.map((slot) => slot.id),
-    }));
 
     return {
       ...prev,
       [dayKey]: {
         ...prev[dayKey],
-        timeSlots: updatedTimeSlots,
-        enabled: updatedTimeSlots.length > 0,
+        enabled: filteredSlots.length > 0,
+        timeSlots: filteredSlots,
       },
     };
   });
