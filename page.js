@@ -47,7 +47,6 @@ export default function ShareAvailability() {
     '20:00',
     '21:00',
     '22:00',
-    '23:00'
 ];
 
 
@@ -81,6 +80,8 @@ export default function ShareAvailability() {
       return prev;
     });
   };
+
+
 const isValidTimeInterval = (time) => {
   if (!time) return false;
   const [hour, min] = time.split(':').map(Number);
@@ -160,10 +161,12 @@ const isValidTimeInterval = (time) => {
   });
 };
 
-
   const handleMouseUp = () => {
     draggingRef.current = false;
   };
+
+  const [hasSaved, setHasSaved] = useState(false);
+
   const saveAllAvailability = () => {
   const newSchedules = {};
 
@@ -209,7 +212,7 @@ const isValidTimeInterval = (time) => {
     };
   });
 
-  setDaySchedules((prev) => ({ ...prev, ...newSchedules }));
+  setHasSaved(true);
   alert('Availability saved! Only 0, 15, 30, 45 minutes were kept.');
 };
 
@@ -503,22 +506,29 @@ const handleManualTimeSubmit = (dayKey) => {
   /**
    * @description Removes a time slot from a day by its index.
    */
-const removeTimeSlot = (dayKey, slotId) => {
-  setDaySchedules((prev) => {
-    const filteredSlots = (prev[dayKey]?.timeSlots || []).filter(
-      (slot) => slot.id !== slotId
-    );
+    const removeTimeSlot = (dayKey, index) => {
+      setDaySchedules((prev) => {
+        const updatedSlots = [...prev[dayKey].timeSlots];
+        updatedSlots.splice(index, 1); // remove the specific slot
 
-    return {
-      ...prev,
-      [dayKey]: {
-        ...prev[dayKey],
-        enabled: filteredSlots.length > 0,
-        timeSlots: filteredSlots,
-      },
+        return {
+          ...prev,
+          [dayKey]: {
+            ...prev[dayKey],
+            timeSlots: updatedSlots,
+            enabled: updatedSlots.length > 0, // disable day if no slots left
+          },
+        };
+      });
+
+      // Also update availability to keep them in sync
+      setAvailability((prev) => {
+        const dayTimes = [...(prev[dayKey] || [])];
+        dayTimes.splice(index, 1); // remove corresponding time
+        return { ...prev, [dayKey]: dayTimes };
+      });
     };
-  });
-};
+
 
 
   /**
@@ -1026,11 +1036,18 @@ const removeTimeSlot = (dayKey, slotId) => {
               <div className="flex flex-col items-center justify-center pt-5 pb-5">
                 <button
                   onClick={saveAllAvailability}
-                  className="px-5 py-2 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700"
+                  disabled={Object.keys(availability).length === 0} // disables if no updates
+                  className={`
+                    px-5 py-2 rounded-lg shadow text-white
+                    ${Object.keys(availability).length === 0 
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700'}
+                  `}
                 >
-                  Save All Availability
+                  Save All Days All Times
                 </button>
               </div>
+
 
               {/* Day Selection */}
               <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-6">
@@ -1076,7 +1093,7 @@ const removeTimeSlot = (dayKey, slotId) => {
                         onClick={() => handleManualTimeSubmit(day.key)}
                         className="px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
                       >
-                        Add
+                        Add Time
                       </button>
                     </div>
                     <div className="space-y-3">
@@ -1114,6 +1131,7 @@ const removeTimeSlot = (dayKey, slotId) => {
                             >
                               Remove
                             </button>
+
                           )}
                         </div>
                       ))}
@@ -1439,8 +1457,12 @@ const removeTimeSlot = (dayKey, slotId) => {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base order-1 sm:order-2"
+                disabled={submitting || !hasSaved} // disabled until availability is saved
+                className={`px-6 py-2 rounded-md transition-colors text-sm sm:text-base order-1 sm:order-2
+                  ${submitting || !hasSaved 
+                    ? 'bg-gray-400 text-gray-200 cursor-not-allowed' 
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
               >
                 {submitting ? 'Creating...' : 'Share Availability'}
               </button>
